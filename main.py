@@ -53,11 +53,10 @@ async def main():
                 
                 caption = f"🎬 {torrent.filename}\n💾 {torrent.size} | 👤 {torrent.seeders} SE"
                 
-                await bot.send_message(
-                    chat_id=CHANNEL_ID,
-                    text=f"{caption}\n\n`{magnet}`",
-                    parse_mode='Markdown'
-                )
+               await bot.send_message(
+    chat_id=CHANNEL_ID,
+    text=f"{caption}\n\n{magnet}"
+)
                 
                 sent_links.add(magnet)
                 new_count += 1
