@@ -32,7 +32,7 @@ async def main():
                 # ارسال به کانال
                 await bot.send_message(
                     chat_id=CHANNEL_ID,
-                    text=f"{caption}\n\n{magnet}",
+                    text=f"{caption}\n\n`{magnet}`",
                     parse_mode='Markdown'
                 )
                 print(f"ارسال شد: {torrent.filename}")
@@ -42,5 +42,5 @@ async def main():
     except Exception as e:
         print(f"خطا: {e}")
 
-if name == "main":
+if __name__ == "__main__":
     asyncio.run(main())
