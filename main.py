@@ -12,10 +12,20 @@ SENT_FILE = "sent_links.json"
 
 
 def load_sent():
-    if os.path.exists(SENT_FILE):
-        with open(SENT_FILE, "r") as f:
-            return set(json.load(f))
-    return set()
+    if not os.path.exists(SENT_FILE):
+        return set()
+    with open(SENT_FILE, "r") as f:
+        old = set(json.load(f))
+    # پاکسازی: هر چیزی که مگنت کامل بود رو به هش تبدیل کن
+    cleaned = set()
+    for item in old:
+        if item.startswith("magnet:"):
+            h = extract_hash(item)
+            if h:
+                cleaned.add(h)
+        else:
+            cleaned.add(item)
+    return cleaned
 
 
 def save_sent(sent_set):
