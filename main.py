@@ -2,6 +2,7 @@ import asyncio
 import os
 import json
 import re
+from datetime import datetime
 from torrent_search import torrent_search_api
 from telegram import Bot
 
@@ -10,28 +11,18 @@ CHANNEL_ID = os.environ.get("CHANNEL_ID")
 
 SENT_FILE = "sent_links.json"
 
+# کیفیت‌هایی که می‌خواهیم پشتیبانی شوند
+QUALITY_FILTERS = ["1080p", "720p", "2160p", "480p"]
 
 def load_sent():
     if not os.path.exists(SENT_FILE):
         return set()
     with open(SENT_FILE, "r") as f:
-        old = set(json.load(f))
-    # پاکسازی: هر چیزی که مگنت کامل بود رو به هش تبدیل کن
-    cleaned = set()
-    for item in old:
-        if item.startswith("magnet:"):
-            h = extract_hash(item)
-            if h:
-                cleaned.add(h)
-        else:
-            cleaned.add(item)
-    return cleaned
-
+        return set(json.load(f))
 
 def save_sent(sent_set):
     with open(SENT_FILE, "w") as f:
         json.dump(list(sent_set), f)
-
 
 def extract_hash(magnet):
     if not magnet:
@@ -39,45 +30,93 @@ def extract_hash(magnet):
     match = re.search(r'urn:btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})', magnet)
     return match.group(1).lower() if match else None
 
+def is_quality_match(filename):
+    """بررسی اینکه آیا نام فایل شامل یکی از کیفیت‌های مورد نظر است یا نه"""
+    if not filename:
+        return False
+    name_lower = filename.lower()
+    return any(q in name_lower for q in QUALITY_FILTERS)
+
+def parse_date(date_val):
+    """تبدیل تاریخ به فرمت قابل مقایسه (برای مرتب‌سازی)"""
+    if not date_val:
+        return datetime.min
+    try:
+        # تلاش برای تبدیل رایج‌ترین فرمت‌ها
+        if isinstance(date_val, str):
+            # فرمت ISO یا فرمت‌های تاریخ معمولی
+            for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+                try:
+                    return datetime.strptime(date_val.split('.')[0], fmt)
+                except ValueError:
+                    continue
+        # اگر از قبل datetime باشد
+        if isinstance(date_val, datetime):
+            return date_val
+    except Exception:
+        pass
+    return datetime.min
+
 
 async def main():
     bot = Bot(token=BOT_TOKEN)
     sent_hashes = load_sent()
     print(f"📂 لینک‌های قبلی: {len(sent_hashes)}")
 
+    # کوئری‌های متمرکز روی کیفیت و محتوای جدید
     queries = [
-        "movie 2024",
-        "series 2024",
-        "anime",
+        "1080p movie",
+        "1080p series",
+        "720p movie",
+        "720p series",
+        "2160p movie",
+        "1080p anime",
+        "1080p documentary",
+        "1080p K-drama",
     ]
 
     new_count = 0
     skipped = 0
+    total_found = 0
 
     for query in queries:
         try:
-            results = await torrent_search_api.search_torrents(query, max_items=5)
+            results = await torrent_search_api.search_torrents(query, max_items=15)
 
             if not results:
                 print(f"چیزی برای '{query}' پیدا نشد.")
                 continue
 
-            for torrent in results:
+            # ۱. فیلتر بر اساس کیفیت (اختیاری اما توصیه‌شده)
+            quality_results = [t for t in results if is_quality_match(getattr(t, 'filename', ''))]
+
+            # ۲. مرتب‌سازی بر اساس تاریخ (جدیدترین‌ها اول)
+            sorted_results = sorted(
+                quality_results,
+                key=lambda t: parse_date(getattr(t, 'date', None)),
+                reverse=True
+            )
+
+            total_found += len(sorted_results)
+            print(f"🔍 برای '{query}': {len(results)} نتیجه کلی، {len(sorted_results)} نتیجه با کیفیت مجاز و مرتب‌شده بر اساس تاریخ.")
+
+            for torrent in sorted_results:
                 magnet = getattr(torrent, 'magnet_link', None)
                 if not magnet:
                     continue
 
                 h = extract_hash(magnet)
                 if not h:
-                    print(f"هش پیدا نشد: {torrent.filename}")
                     continue
 
                 if h in sent_hashes:
-                    print(f"⏭️ تکراری، رد شد: {torrent.filename}")
                     skipped += 1
                     continue
 
-                caption = f"🎬 {torrent.filename}\n💾 {torrent.size} | 👤 {torrent.seeders} SE"
+                caption = (
+                    f"🎬 {torrent.filename}\n"
+                    f"💾 {torrent.size} | 👤 {torrent.seeders} SE | 📅 {getattr(torrent, 'date', 'N/A')}"
+                )
 
                 await bot.send_message(
                     chat_id=CHANNEL_ID,
@@ -94,7 +133,7 @@ async def main():
             print(f"خطا در کوئری '{query}': {e}")
 
     save_sent(sent_hashes)
-    print(f"\n📊 نتیجه: {new_count} جدید ارسال شد، {skipped} تکراری رد شد.")
+    print(f"\n📊 نتیجه نهایی: {new_count} لینک جدید ارسال شد، {skipped} تکراری رد شد (از مجموع {total_found} نتیجه پردازش‌شده).")
 
 
 if __name__ == "__main__":
