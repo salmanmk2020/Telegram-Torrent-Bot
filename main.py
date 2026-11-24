@@ -135,7 +135,7 @@ async def main():
     print(f"📂 لینک‌های قبلی: {len(sent_hashes)}")
 
     queries = [
-        "Complete.Series",
+        "Complete Series",
 
     ]
 
