@@ -135,17 +135,8 @@ async def main():
     print(f"📂 لینک‌های قبلی: {len(sent_hashes)}")
 
     queries = [
-        "1080p movie",
-        "1080p series",
-        "720p movie",
-        "720p series",
-        "2160p movie",
-        "1080p anime",
-        "1080p documentary",
-        "1080p K-drama",
-        "1080p",
-        "720p",
-        "2160p",
+        "Complete.Series",
+
     ]
 
     new_count = 0
