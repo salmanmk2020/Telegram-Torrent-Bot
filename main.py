@@ -143,6 +143,9 @@ async def main():
         "1080p anime",
         "1080p documentary",
         "1080p K-drama",
+        "1080p",
+        "720p",
+        "2160p",
     ]
 
     new_count = 0
