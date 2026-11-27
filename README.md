@@ -48,7 +48,7 @@ pip install -r requirements.txt
 | `SEND_INTERVAL_SECONDS` | `3.2` | فاصلهٔ ارسال؛ کمتر از ۳ = خطر Flood |
 | `SEARCHES_PER_RUN` | `4` | تعداد کوئری چرخشی در هر اجرا |
 | `POPULAR_PER_SOURCE` | `100` | سقف آیتم از هر منبع در لیست‌های تازه |
-| `MAX_QUEUE` | `20000` | حداکثر آیتم در صف |
+| `MAX_QUEUE` | `6000` | حداکثر آیتم در صف |
 
 ## تست محلی
 

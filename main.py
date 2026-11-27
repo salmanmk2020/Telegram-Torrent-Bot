@@ -100,7 +100,8 @@ SEND_INTERVAL = _env_float("SEND_INTERVAL_SECONDS", 3.2)  # ~18.7 msg/min
 SEND_JITTER = _env_float("SEND_JITTER_SECONDS", 0.5)
 POPULAR_PER_SOURCE = _env_int("POPULAR_PER_SOURCE", 100)
 SEARCHES_PER_RUN = _env_int("SEARCHES_PER_RUN", 4)
-MAX_QUEUE = _env_int("MAX_QUEUE", 20000)
+MAX_QUEUE = _env_int("MAX_QUEUE", 6000)
+MAGNET_STORE_CHARS = _env_int("MAGNET_STORE_CHARS", 400)  # keep state small
 MAX_ATTEMPTS = _env_int("MAX_ATTEMPTS", 4)
 QUEUE_SAVE_INTERVAL = _env_float("QUEUE_SAVE_SECONDS", 60)
 COMMIT_EVERY = _env_float("COMMIT_EVERY_SECONDS", 600)
@@ -310,8 +311,11 @@ class State:
             try:
                 for item in json.loads(QUEUE_FILE.read_text(encoding="utf-8")):
                     key = item.get("h")
-                    if key and key not in self.sent:
-                        self.queue[key] = item
+                    if not key or key in self.sent or not item.get("m"):
+                        continue
+                    # Compact magnets written by older versions of the bot.
+                    item["m"] = slim_magnet(item["m"], MAGNET_STORE_CHARS)
+                    self.queue[key] = item
             except (OSError, json.JSONDecodeError) as exc:
                 LOG.error("queue.json قابل خواندن نبود (%s) - از صفر شروع می‌شود", exc)
 
@@ -356,7 +360,9 @@ class State:
             "s": str(getattr(torrent, "size", "") or "N/A"),
             "se": int(getattr(torrent, "seeders", 0) or 0),
             "d": str(getattr(torrent, "date", "") or ""),
-            "m": magnet,
+            # Trim at insert time: a full magnet carries up to 100 trackers and
+            # would bloat the state file by ~1 KB per item.
+            "m": slim_magnet(magnet, MAGNET_STORE_CHARS),
             "src": str(getattr(torrent, "source", "") or ""),
             "q": query,
             "a": 0,
@@ -404,8 +410,12 @@ class State:
         )
 
 
-def git_commit_state(message: str) -> None:
-    """Amend the single commit on the `state` branch and force-push it."""
+def git_commit_state(message: str, include_queue: bool = True) -> None:
+    """Amend the single commit on the `state` branch and force-push it.
+
+    Mid-run commits only persist ``sent.txt`` (the dedupe source of truth);
+    the large queue file is pushed once at the end of the run.
+    """
     repo = _env("STATE_GIT_DIR", "")
     if not repo or not (Path(repo) / ".git").exists():
         return
@@ -415,7 +425,10 @@ def git_commit_state(message: str) -> None:
             ["git", "-C", repo, *args], capture_output=True, text=True, check=False
         )
 
-    git("add", "-A")
+    if include_queue:
+        git("add", "-A")
+    else:
+        git("add", "--", "sent.txt", "meta.json")
     if git("diff", "--cached", "--quiet").returncode == 0:
         return
     if git("commit", "-q", "--amend", "-m", message).returncode != 0:
@@ -610,7 +623,10 @@ async def run(args: argparse.Namespace) -> int:
                     last_queue_save = now
                 if now - last_commit >= COMMIT_EVERY:
                     state.save_meta()
-                    git_commit_state(f"state {datetime.now(timezone.utc):%Y-%m-%dT%H:%M:%SZ}")
+                    git_commit_state(
+                        f"state {datetime.now(timezone.utc):%Y-%m-%dT%H:%M:%SZ}",
+                        include_queue=False,
+                    )
                     last_commit = now
 
                 if time.monotonic() < deadline:
