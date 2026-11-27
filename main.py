@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import base64
+import html
 import json
 import logging
 import os
@@ -275,15 +276,19 @@ def slim_magnet(magnet: str, budget: int) -> str:
 
 
 def build_text(item: dict) -> str:
-    date = (item.get("d") or "N/A")[:10]
+    date = html.escape(str(item.get("d") or "N/A")[:10])
     caption = (
-        f"🎬 {item.get('t') or 'N/A'}\n"
-        f"💾 {item.get('s') or 'N/A'} | 👤 {item.get('se', 0)} SE | 📅 {date}\n"
-        f"📡 {item.get('src') or 'N/A'}\n\n"
-        f"{hashtags(item)}"
+        f"🎬 {html.escape(str(item.get('t') or 'N/A'))}\n"
+        f"💾 {html.escape(str(item.get('s') or 'N/A'))} | "
+        f"👤 {item.get('se', 0)} SE | 📅 {date}\n"
+        f"📡 {html.escape(str(item.get('src') or 'N/A'))}\n\n"
+        f"{html.escape(hashtags(item))}"
     )
-    magnet = slim_magnet(item["m"], min(MAGNET_SAFE_CHARS, MAX_MESSAGE_CHARS - len(caption) - 4))
-    return f"{caption}\n\n{magnet}"
+    magnet = slim_magnet(item["m"], min(MAGNET_SAFE_CHARS, MAX_MESSAGE_CHARS - len(caption) - 20))
+    # A <code> block is copy-on-tap in every Telegram client (channels included),
+    # which is what "click the magnet to copy it" needs. It also stops Telegram
+    # from turning the magnet into an "open your torrent app" link.
+    return f"{caption}\n\n<code>{html.escape(magnet, quote=False)}</code>"
 
 
 # --------------------------------------------------------------------------
@@ -456,6 +461,7 @@ async def send_one(bot: Bot, text: str) -> str:
             await bot.send_message(
                 chat_id=CHANNEL_ID,
                 text=text,
+                parse_mode="HTML",
                 disable_web_page_preview=True,
             )
             return "sent"
