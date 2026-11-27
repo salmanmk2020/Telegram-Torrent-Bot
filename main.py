@@ -285,10 +285,10 @@ def build_text(item: dict) -> str:
         f"{html.escape(hashtags(item))}"
     )
     magnet = slim_magnet(item["m"], min(MAGNET_SAFE_CHARS, MAX_MESSAGE_CHARS - len(caption) - 20))
-    # A <code> block is copy-on-tap in every Telegram client (channels included),
-    # which is what "click the magnet to copy it" needs. It also stops Telegram
-    # from turning the magnet into an "open your torrent app" link.
-    return f"{caption}\n\n<code>{html.escape(magnet, quote=False)}</code>"
+    # <pre> renders as a monospace block with an explicit "copy" button in
+    # Telegram Desktop and is copy-on-tap on mobile. Plain <code> is inline and
+    # some clients don't copy it on click.
+    return f"{caption}\n\n<pre>{html.escape(magnet, quote=False)}</pre>"
 
 
 # --------------------------------------------------------------------------
