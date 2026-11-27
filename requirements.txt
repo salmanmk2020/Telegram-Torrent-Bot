@@ -1,2 +1,2 @@
-PYTHON-telegram-bot
-torrent-search-mcp
+torrent-search-mcp>=4.6,<5
+python-telegram-bot>=22.0,<23

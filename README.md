@@ -1,40 +1,70 @@
-# Telegram Movie / TV RSS Publisher
+# Torrent → Telegram Bot
 
-Publishes RSS entries to a Telegram channel in this format:
+ربات دوره‌ای برای ارسال لینک تورنت فیلم/سریال/انیمه به یک کانال تلگرام، طراحی‌شده برای اجرا روی GitHub Actions.
 
-Readable title
+## چطور کار می‌کند
 
-Exact original RSS title
-Magnet or direct `.torrent` URL
+هر اجرا:
 
-## GitHub repository setup
+1. **state** را می‌خواند: هش‌های ارسال‌شده + صف باقی‌مانده.
+2. **منابع را جمع می‌کند**:
+   - لیست‌های «آخرین‌ها/برترین‌ها» (EZTV، SubsPlease، YTS، Nyaa، TPB، UIndex، 1337x)
+   - ۴ کوئری چرخشی از یک کاتالوگ ~۱۰۰تایی (سال‌ها، ژانرها، زبان‌ها، کیفیت‌ها)
+3. **ادغام و حذف تکراری** بر اساس info-hash (hex و base32 یکی می‌شوند).
+4. **مرتب‌سازی سراسری** بر اساس تاریخ نزولی → همیشه جدیدترین‌ها اول.
+5. **ارسال** با فاصلهٔ ~۳.۲ ثانیه (≈۱۸.۷ پیام در دقیقه) تا پر شدن بودجهٔ زمانی.
+6. **ذخیرهٔ state** بعد از هر ارسال + پوش دوره‌ای به شاخهٔ `state`.
 
-1. Keep the repository **Private**.
-2. Add repository Actions secrets:
-   - `BOT_TOKEN`: Telegram bot token from BotFather.
-   - `CHANNEL_ID`: channel username such as `@your_channel`, or numeric channel ID.
-3. Add repository Actions variable:
-   - `RSS_FEEDS`: one or more RSS feed URLs separated by semicolons or new lines.
-4. The bot must be an administrator in the channel and have permission to post.
-5. Ensure the workflow is on the repository's default branch.
+## نصب
 
-## RSS source requirements
+```bash
+pip install -r requirements.txt
+```
 
-Only add feeds from sources that authorize redistribution of the linked works.
-Each feed item should expose a magnet URI or a direct `.torrent` enclosure/link.
-The bot does not crawl websites or bypass access controls.
+## مهاجرت از نسخهٔ قبلی
 
-The title filter accepts entries containing a year, a TV episode/season marker,
-or an animation keyword. It excludes entries whose title contains common anime
-markers. Title-only classification is imperfect; use film/TV-focused feeds.
+نسخهٔ قبلی لیست ارسال‌شده‌ها را در `sent_links.json` نگه می‌داشت. در اولین اجرای این نسخه،
+اگر `state/sent.txt` وجود نداشته باشد، همان فایل به‌صورت خودکار خوانده و به state جدید
+منتقل می‌شود؛ پس هیچ لینکی دوباره ارسال نمی‌شود. بعد از یک اجرای موفق می‌توانی
+`sent_links.json` را از `main` حذف کنی.
 
-## Schedule
+## تنظیم Secrets در گیت‌هاب
 
-GitHub Actions checks every 5 minutes.
-GitHub's minimum scheduled interval is 5 minutes, but scheduled jobs can be delayed.
+در `Settings → Secrets and variables → Actions`:
 
-## Important
+| Secret | مقدار |
+|---|---|
+| `BOT_TOKEN` | توکن ربات از [@BotFather](https://t.me/BotFather) |
+| `CHANNEL_ID` | آی‌دی عددی کانال مثل `-1001234567890` یا `@channelusername` |
 
-- Never commit your bot token.
-- `seen.json` stores published-item keys to prevent duplicates.
-- If Telegram rejects a message, that item is not marked as published.
+> ربات باید **ادمین کانال** با دسترسی «Post messages» باشد.
+
+## تنظیمات قابل تغییر (متغیر محیطی)
+
+| متغیر | پیش‌فرض | توضیح |
+|---|---|---|
+| `RUN_BUDGET_SECONDS` | `1500` | سقف کل اجرا (۲۵ دقیقه) |
+| `SEARCH_BUDGET_SECONDS` | `300` | سقف زمان جستجو در هر اجرا |
+| `SEND_INTERVAL_SECONDS` | `3.2` | فاصلهٔ ارسال؛ کمتر از ۳ = خطر Flood |
+| `SEARCHES_PER_RUN` | `4` | تعداد کوئری چرخشی در هر اجرا |
+| `POPULAR_PER_SOURCE` | `100` | سقف آیتم از هر منبع در لیست‌های تازه |
+| `MAX_QUEUE` | `20000` | حداکثر آیتم در صف |
+
+## تست محلی
+
+```bash
+export BOT_TOKEN=...
+export CHANNEL_ID=...
+python main.py --dry-run --limit 10   # فقط چاپ می‌کند
+```
+
+برای اولین اجرای واقعی، از تب Actions → `torrent-bot` → **Run workflow** استفاده کن و
+فیلد `limit` را مثلاً `5` بگذار تا مطمئن شوی همه‌چیز درست است.
+
+## محدودیت‌ها (مهم)
+
+- **تلگرام حدود ۲۰ پیام در دقیقه به هر چت** اجازه می‌دهد؛ این سقف per-chat است و ربات دوم هم دورش نمی‌زند.
+- **کتابخانه صفحه‌بندی ندارد**؛ فقط صفحهٔ اول جستجوی هر سایت را می‌خواند. بنابراین «همهٔ تورنت‌های دنیا» از طریق جستجو قابل شمارش نیست. این ربات با چرخش کوئری + لیست‌های تازه، پوشش را حداکثر می‌کند.
+- **ریپوی عمومی** برای Actions رایگان و نامحدود است. ریپوی خصوصی فقط ۲۰۰۰ دقیقه در ماه دارد و این اجراها بیشتر از آن مصرف می‌کنند.
+- تاریخچهٔ ارسال در شاخهٔ `state` نگهداری می‌شود تا `main` شلوغ نشود. هر اجرا یک کامیت amend + force-push روی همان شاخه است.
+- ارسال انبوه لینک‌های کپی‌رایت‌دار ممکن است باعث محدودیت کانال/ربات یا ریپو شود؛ مسئولیتش با شماست.
